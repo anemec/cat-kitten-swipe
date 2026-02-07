@@ -177,6 +177,12 @@ function App(): JSX.Element {
     preloadFromStack(cards);
   }, [cards, preloadFromStack]);
 
+  useEffect(() => {
+    if (swiping && !cards.some((card) => card.unique === swiping.unique)) {
+      setSwiping(null);
+    }
+  }, [cards, swiping]);
+
   const removeCard = useCallback(
     (unique: string) => {
       setCards((prev) => {

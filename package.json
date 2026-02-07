@@ -28,8 +28,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "framer-motion": "^12.33.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-tinder-card": "^1.6.4"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^25.2.1",
