@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { motion } from "framer-motion";
-import TinderCard from "react-tinder-card";
 import type { CatPhoto } from "./types";
 import "./app.css";
 
@@ -12,15 +11,6 @@ const SHIBE_API_URL = "https://shibe.online/api/cats?count=28&urls=true&httpsUrl
 const PRELOAD_TARGET = 40;
 const QUEUE_LOW_WATERMARK = 30;
 const INCOMING_CAP = 90;
-
-type SwipeDirection = "left" | "right" | "up" | "down";
-
-type TinderApi = {
-  swipe: (dir?: SwipeDirection) => Promise<void>;
-  restoreCard: () => Promise<void>;
-};
-
-type CardRefMap = Record<string, React.RefObject<TinderApi>>;
 
 function loadLiked(): CatPhoto[] {
   try {
@@ -46,13 +36,7 @@ function extToMime(url: string): string {
 async function fetchTheCatApi(): Promise<CatPhoto[]> {
   const response = await fetch(CAT_API_URL);
   if (!response.ok) throw new Error("TheCatAPI request failed");
-
-  const data = (await response.json()) as Array<{
-    id: string;
-    url: string;
-    width?: number;
-    height?: number;
-  }>;
+  const data = (await response.json()) as Array<{ id: string; url: string; width?: number; height?: number }>;
 
   return data.map((item) => ({
     unique: `catapi:${item.id}`,
@@ -67,15 +51,10 @@ async function fetchTheCatApi(): Promise<CatPhoto[]> {
 }
 
 async function fetchCataas(): Promise<CatPhoto[]> {
-  const skip = Math.floor(Math.random() * 6000);
+  const skip = Math.floor(Math.random() * 7000);
   const response = await fetch(`${CATAAS_API_URL}?limit=30&skip=${skip}`);
   if (!response.ok) throw new Error("CATAAS request failed");
-
-  const data = (await response.json()) as Array<{
-    id: string;
-    tags?: string[];
-    mimetype?: string;
-  }>;
+  const data = (await response.json()) as Array<{ id: string; tags?: string[]; mimetype?: string }>;
 
   return data.map((item) => ({
     unique: `cataas:${item.id}`,
@@ -92,14 +71,13 @@ async function fetchCataas(): Promise<CatPhoto[]> {
 async function fetchShibe(): Promise<CatPhoto[]> {
   const response = await fetch(SHIBE_API_URL);
   if (!response.ok) throw new Error("Shibe request failed");
-
   const urls = (await response.json()) as string[];
   if (!Array.isArray(urls)) return [];
 
   return urls
     .filter((url): url is string => typeof url === "string" && url.length > 0)
     .map((url) => {
-      const id = url.split("/").pop()?.split("?")[0] ?? crypto.randomUUID();
+      const id = url.split("/").pop()?.split("?")[0] ?? `shibe-${Math.random().toString(36).slice(2)}`;
       return {
         unique: `shibe:${id}`,
         id,
@@ -113,23 +91,23 @@ async function fetchShibe(): Promise<CatPhoto[]> {
     });
 }
 
+type SwipeDir = "left" | "right";
+
 function App(): JSX.Element {
   const [cards, setCards] = useState<CatPhoto[]>([]);
   const [liked, setLiked] = useState<CatPhoto[]>(() => loadLiked());
-  const [fetchError, setFetchError] = useState<string>("");
+  const [fetchError, setFetchError] = useState("");
   const [isFetching, setIsFetching] = useState(false);
+  const [swiping, setSwiping] = useState<{ unique: string; dir: SwipeDir } | null>(null);
 
   const seenRef = useRef<Set<string>>(new Set(liked.map((card) => card.unique)));
   const preloadedRef = useRef<Set<string>>(new Set());
   const preloadJobsRef = useRef<Map<string, Promise<void>>>(new Map());
-  const refsRef = useRef<CardRefMap>({});
   const fetchingRef = useRef(false);
 
-  const topCard = cards[cards.length - 1] ?? null;
-
   const swipeThreshold = useMemo(() => {
-    if (typeof window === "undefined") return 90;
-    return Math.max(90, Math.floor(window.innerWidth * 0.22));
+    if (typeof window === "undefined") return 100;
+    return Math.max(95, Math.floor(window.innerWidth * 0.22));
   }, []);
 
   const preloadImage = useCallback((url: string): Promise<void> => {
@@ -146,9 +124,7 @@ function App(): JSX.Element {
       };
       img.onerror = () => resolve();
       img.src = url;
-    }).finally(() => {
-      preloadJobsRef.current.delete(url);
-    });
+    }).finally(() => preloadJobsRef.current.delete(url));
 
     preloadJobsRef.current.set(url, job);
     return job;
@@ -174,7 +150,7 @@ function App(): JSX.Element {
       const incoming = fetched.filter((item) => item.url && !seenRef.current.has(item.unique)).slice(0, INCOMING_CAP);
 
       if (!incoming.length && results.every((r) => r.status === "rejected")) {
-        throw new Error("All photo APIs failed");
+        throw new Error("All APIs failed");
       }
 
       incoming.forEach((item) => seenRef.current.add(item.unique));
@@ -201,13 +177,6 @@ function App(): JSX.Element {
     preloadFromStack(cards);
   }, [cards, preloadFromStack]);
 
-  const getCardRef = (id: string): React.RefObject<TinderApi> => {
-    if (!refsRef.current[id]) {
-      refsRef.current[id] = React.createRef();
-    }
-    return refsRef.current[id];
-  };
-
   const removeCard = useCallback(
     (unique: string) => {
       setCards((prev) => {
@@ -219,7 +188,7 @@ function App(): JSX.Element {
     [fillQueue],
   );
 
-  const rateTwoPaws = useCallback((card: CatPhoto) => {
+  const likeCard = useCallback((card: CatPhoto) => {
     setLiked((prev) => {
       const next = [card, ...prev.filter((item) => item.unique !== card.unique)].slice(0, 160);
       saveLiked(next);
@@ -227,33 +196,38 @@ function App(): JSX.Element {
     });
   }, []);
 
-  const onSwipe = useCallback(
-    (dir: SwipeDirection, card: CatPhoto) => {
-      if (dir === "right") {
-        rateTwoPaws(card);
+  const commitSwipe = useCallback(
+    (dir: SwipeDir) => {
+      const top = cards[cards.length - 1];
+      if (!top || swiping) return;
+      setSwiping({ unique: top.unique, dir });
+      if (dir === "right") likeCard(top);
+    },
+    [cards, likeCard, swiping],
+  );
+
+  const onTopDragEnd = useCallback(
+    (_: PointerEvent | MouseEvent | TouchEvent, info: { offset: { x: number }; velocity: { x: number } }) => {
+      if (swiping) return;
+      const x = info.offset.x;
+      const vx = info.velocity.x;
+      if (x > swipeThreshold || vx > 650) {
+        commitSwipe("right");
+        return;
       }
-      removeCard(card.unique);
+      if (x < -swipeThreshold || vx < -650) {
+        commitSwipe("left");
+      }
     },
-    [rateTwoPaws, removeCard],
+    [commitSwipe, swipeThreshold, swiping],
   );
 
-  const onCardError = useCallback(
-    (card: CatPhoto) => {
-      removeCard(card.unique);
-    },
-    [removeCard],
-  );
-
-  const swipeByButton = useCallback(async (dir: SwipeDirection) => {
-    const card = cards[cards.length - 1];
-    if (!card) return;
-    await refsRef.current[card.unique]?.current?.swipe(dir);
-  }, [cards]);
+  const displayed = cards.slice(-4);
 
   return (
     <main className="scene">
-      <motion.div className="atmo a" animate={{ y: [-8, 8, -8], x: [-6, 10, -6] }} transition={{ repeat: Infinity, duration: 14, ease: "easeInOut" }} />
-      <motion.div className="atmo b" animate={{ y: [6, -10, 6], x: [8, -12, 8] }} transition={{ repeat: Infinity, duration: 16, ease: "easeInOut" }} />
+      <motion.div className="atmo a" animate={{ y: [-10, 10, -10], x: [-8, 10, -8] }} transition={{ repeat: Infinity, duration: 16, ease: "easeInOut" }} />
+      <motion.div className="atmo b" animate={{ y: [8, -12, 8], x: [6, -8, 6] }} transition={{ repeat: Infinity, duration: 18, ease: "easeInOut" }} />
 
       <header className="hero">
         <h1>CatSwipe</h1>
@@ -261,49 +235,66 @@ function App(): JSX.Element {
 
       <section className="deckWrap">
         <div className="deck">
-          {cards.length === 0 && (
-            <div className="emptyCard">
-              {isFetching ? "Finding cats and kittens..." : "No cats loaded yet."}
-            </div>
-          )}
+          {cards.length === 0 && <div className="emptyCard">{isFetching ? "Finding cats and kittens..." : "No cats loaded yet."}</div>}
 
-          {cards.map((card, index) => {
-            const depth = cards.length - 1 - index;
+          {displayed.map((card, index) => {
+            const depth = displayed.length - 1 - index;
             const isTop = depth === 0;
+            const isActiveSwipe = swiping?.unique === card.unique;
 
             return (
-              <TinderCard
+              <motion.article
                 key={card.unique}
-                ref={getCardRef(card.unique)}
-                className="swipe"
-                preventSwipe={["up", "down"]}
-                swipeRequirementType="position"
-                swipeThreshold={swipeThreshold}
-                onSwipe={(dir) => onSwipe(dir as SwipeDirection, card)}
-                onCardLeftScreen={() => {
-                  // Backup in case some browsers skip onSwipe callbacks.
-                  removeCard(card.unique);
+                className={`card ${isTop ? "top" : ""}`}
+                drag={isTop && !swiping ? "x" : false}
+                dragElastic={0.18}
+                dragMomentum
+                onDragEnd={isTop ? onTopDragEnd : undefined}
+                style={{ zIndex: index + 1 }}
+                initial={false}
+                animate={
+                  isActiveSwipe
+                    ? {
+                        x: swiping?.dir === "right" ? window.innerWidth * 1.15 : -window.innerWidth * 1.15,
+                        rotate: swiping?.dir === "right" ? 24 : -24,
+                        opacity: 0.2,
+                        scale: 0.97,
+                      }
+                    : {
+                        x: 0,
+                        y: depth * 8,
+                        rotate: 0,
+                        opacity: 1 - depth * 0.11,
+                        scale: 1 - depth * 0.024,
+                      }
+                }
+                transition={{ type: "spring", stiffness: 460, damping: 34, mass: 0.72 }}
+                onAnimationComplete={() => {
+                  if (isActiveSwipe) {
+                    removeCard(card.unique);
+                    setSwiping(null);
+                  }
                 }}
               >
-                <article
-                  className={`card ${isTop ? "top" : ""}`}
-                  style={{
-                    zIndex: index + 1,
-                    transform: depth > 0 ? `translateY(${Math.min(depth * 6, 18)}px) scale(${1 - Math.min(depth * 0.016, 0.04)})` : undefined,
-                    opacity: depth > 2 ? 0 : 1,
+                <img
+                  src={card.url}
+                  alt="Cat"
+                  loading={isTop ? "eager" : "lazy"}
+                  onError={() => {
+                    removeCard(card.unique);
+                    if (swiping?.unique === card.unique) setSwiping(null);
                   }}
-                >
-                  <img src={card.url} alt="Cat" loading={isTop ? "eager" : "lazy"} onError={() => onCardError(card)} />
-                </article>
-              </TinderCard>
+                />
+              </motion.article>
             );
           })}
         </div>
 
         <div className="actions">
-          <button className="paw one" aria-label="One Paw" onClick={() => void swipeByButton("left")}>🐾</button>
-          <button className="paw two" aria-label="Two Paws" onClick={() => void swipeByButton("right")}>🐾🐾</button>
+          <button className="paw one" aria-label="One Paw" onClick={() => commitSwipe("left")}>🐾</button>
+          <button className="paw two" aria-label="Two Paws" onClick={() => commitSwipe("right")}>🐾🐾</button>
         </div>
+
         {fetchError ? <p className="errorText">{fetchError}</p> : null}
       </section>
 
