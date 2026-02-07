@@ -1,6 +1,4 @@
 import "../styles.css";
-import * as tf from "@tensorflow/tfjs";
-import * as mobilenet from "@tensorflow-models/mobilenet";
 import type { CatPhoto, PreferenceWeights } from "./types";
 import { applyFeedback, emptyPrefs, hybridScore } from "./lib/recommender";
 import { centroidOf } from "./lib/vector";
@@ -8,12 +6,18 @@ import { centroidOf } from "./lib/vector";
 const CAT_API_URL = "https://api.thecatapi.com/v1/images/search?limit=12";
 const CATAAS_API_URL = "https://cataas.com/api/cats";
 const SHIBE_API_URL = "https://shibe.online/api/cats?count=18&urls=true&httpsUrls=true";
+const ENABLE_EMBEDDINGS = false;
+
+type TfModule = typeof import("@tensorflow/tfjs");
+type MobileNetModule = typeof import("@tensorflow-models/mobilenet");
 
 interface MLState {
   loading: boolean;
   ready: boolean;
   error: string | null;
-  model: mobilenet.MobileNet | null;
+  tf: TfModule | null;
+  mobilenet: MobileNetModule | null;
+  model: Awaited<ReturnType<MobileNetModule["load"]>> | null;
   embeddingCache: Map<string, number[]>;
   embeddingJobs: Map<string, Promise<number[] | null>>;
   likedVectors: number[][];
@@ -66,6 +70,8 @@ const state: AppState = {
     loading: false,
     ready: false,
     error: null,
+    tf: null,
+    mobilenet: null,
     model: null,
     embeddingCache: new Map(),
     embeddingJobs: new Map(),
@@ -112,7 +118,9 @@ async function boot(): Promise<void> {
   attachEvents();
   hydratePrefsFromLikes();
 
-  void initML();
+  if (ENABLE_EMBEDDINGS) {
+    void initML();
+  }
   await fillQueue();
   ensureDeckPrimed();
 }
@@ -535,11 +543,28 @@ async function fetchShibeCats(): Promise<CatPhoto[]> {
 }
 
 async function initML(): Promise<void> {
+  if (!ENABLE_EMBEDDINGS) {
+    setMLStatus("");
+    return;
+  }
   if (state.ml.loading || state.ml.ready) return;
   state.ml.loading = true;
   setMLStatus("AI: loading MobileNet...");
 
   try {
+    if (!state.ml.tf || !state.ml.mobilenet) {
+      const [tf, mobilenet] = await Promise.all([
+        import("@tensorflow/tfjs"),
+        import("@tensorflow-models/mobilenet"),
+      ]);
+      state.ml.tf = tf;
+      state.ml.mobilenet = mobilenet;
+    }
+
+    const tf = state.ml.tf;
+    const mobilenet = state.ml.mobilenet;
+    if (!tf || !mobilenet) throw new Error("ML dependencies failed to load");
+
     try {
       await tf.setBackend("webgl");
     } catch {
@@ -612,15 +637,16 @@ function preloadImage(url: string): Promise<void> {
 }
 
 async function getEmbeddingForCat(cat: CatPhoto): Promise<number[] | null> {
-  if (!state.ml.ready || !state.ml.model) return null;
+  if (!ENABLE_EMBEDDINGS || !state.ml.ready || !state.ml.model || !state.ml.tf) return null;
   if (state.ml.embeddingCache.has(cat.unique)) return state.ml.embeddingCache.get(cat.unique) ?? null;
   if (state.ml.embeddingJobs.has(cat.unique)) return state.ml.embeddingJobs.get(cat.unique) ?? null;
 
+  const tf = state.ml.tf;
   const job = (async () => {
     const img = await loadImage(cat.url);
     const vector = tf.tidy<number[]>(() => {
       const emb = state.ml.model!.infer(img, true);
-      const tensorOut = (Array.isArray(emb) ? emb[0] : emb) as tf.Tensor;
+      const tensorOut = (Array.isArray(emb) ? emb[0] : emb) as import("@tensorflow/tfjs").Tensor;
       const squeezed = tensorOut.squeeze();
       const normalized = squeezed.div(tf.norm(squeezed));
       return Array.from(normalized.dataSync()) as number[];
