@@ -310,14 +310,14 @@ function App(): JSX.Element {
                     ? {
                         x: swiping?.dir === "right" ? window.innerWidth * 1.15 : -window.innerWidth * 1.15,
                         rotate: swiping?.dir === "right" ? 24 : -24,
-                        opacity: 0.2,
-                        scale: 0.97,
+                        opacity: 1,
+                        scale: 1,
                       }
                     : {
                         x: 0,
                         y: depth * 8,
                         rotate: 0,
-                        opacity: 1 - depth * 0.11,
+                        opacity: 1,
                         scale: 1 - depth * 0.024,
                       }
                 }
