@@ -28,6 +28,7 @@ interface AppState {
   liked: CatPhoto[];
   seen: Set<string>;
   fetching: boolean;
+  isAdvancing: boolean;
   prefs: PreferenceWeights;
   preloadedUrls: Set<string>;
   preloadJobs: Map<string, Promise<void>>;
@@ -57,6 +58,7 @@ const state: AppState = {
   liked: loadLikes(),
   seen: new Set(),
   fetching: false,
+  isAdvancing: false,
   prefs: emptyPrefs(),
   preloadedUrls: new Set(),
   preloadJobs: new Map(),
@@ -122,8 +124,8 @@ function mustGet<T extends HTMLElement>(id: string): T {
 }
 
 function attachEvents(): void {
-  el.likeBtn.addEventListener("click", () => void vote(true));
-  el.passBtn.addEventListener("click", () => void vote(false));
+  el.likeBtn.addEventListener("click", () => triggerVote(true));
+  el.passBtn.addEventListener("click", () => triggerVote(false));
 
   el.clearLikesBtn.addEventListener("click", () => {
     state.liked = [];
@@ -150,8 +152,8 @@ function attachEvents(): void {
   }
 
   window.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowRight") void vote(true);
-    if (event.key === "ArrowLeft") void vote(false);
+    if (event.key === "ArrowRight") triggerVote(true);
+    if (event.key === "ArrowLeft") triggerVote(false);
   });
 
   el.cardImage.addEventListener("error", onCardImageError);
@@ -160,6 +162,7 @@ function attachEvents(): void {
 function onCardImageError(): void {
   if (!state.current) return;
 
+  state.isAdvancing = false;
   console.warn("Skipping broken image URL", state.current.url);
   state.ml.embeddingCache.delete(state.current.unique);
   state.ml.embeddingJobs.delete(state.current.unique);
@@ -172,6 +175,7 @@ function onCardImageError(): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
+  if (state.isAdvancing) return;
   if (!event.isPrimary) return;
   startDrag(event.clientX, event.clientY, event.pointerId);
   el.card.setPointerCapture(event.pointerId);
@@ -254,9 +258,9 @@ function endDrag(): void {
   const isFlick = Math.abs(velocityX) > 0.55 && Math.abs(drag.x) > 22;
 
   if (drag.x > threshold || (isFlick && velocityX > 0)) {
-    animateOutAndVote(true);
+    triggerVote(true);
   } else if (drag.x < -threshold || (isFlick && velocityX < 0)) {
-    animateOutAndVote(false);
+    triggerVote(false);
   } else {
     resetCardPosition();
   }
@@ -273,18 +277,47 @@ function cancelDrag(): void {
   resetCardPosition();
 }
 
-function animateOutAndVote(isLike: boolean): void {
-  const x = isLike ? window.innerWidth : -window.innerWidth;
-  el.card.style.transition = "transform 180ms ease";
-  el.card.style.transform = `translate3d(${x}px, 0, 0) rotate(${isLike ? 24 : -24}deg)`;
-  window.setTimeout(() => {
-    void vote(isLike);
-  }, 140);
+function triggerVote(isLike: boolean): void {
+  if (state.isAdvancing || !state.current) return;
+  state.isAdvancing = true;
+  void animateOutAndVote(isLike);
+}
+
+async function animateOutAndVote(isLike: boolean): Promise<void> {
+  const direction = isLike ? 1 : -1;
+  const x = direction * (window.innerWidth + 80);
+  el.card.style.transition = "transform 210ms cubic-bezier(0.2, 0.8, 0.35, 1), opacity 180ms ease";
+  el.card.style.opacity = "0.92";
+  el.card.style.transform = `translate3d(${x}px, 0, 0) rotate(${direction * 24}deg)`;
+
+  window.setTimeout(async () => {
+    await vote(isLike, { skipReset: true });
+    animateCardIn(direction);
+  }, 190);
+}
+
+function animateCardIn(direction: number): void {
+  el.card.style.transition = "none";
+  el.card.style.opacity = "0.2";
+  el.card.style.transform = `translate3d(${direction * 34}px, 8px, 0) scale(0.985)`;
+  setBadge("none");
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.card.style.transition = "transform 250ms cubic-bezier(0.22, 1, 0.36, 1), opacity 210ms ease";
+      el.card.style.opacity = "1";
+      el.card.style.transform = "translate3d(0,0,0) rotate(0deg) scale(1)";
+      window.setTimeout(() => {
+        state.isAdvancing = false;
+      }, 230);
+    });
+  });
 }
 
 function resetCardPosition(): void {
-  el.card.style.transition = "transform 180ms ease";
-  el.card.style.transform = "translate3d(0,0,0) rotate(0deg)";
+  el.card.style.transition = "transform 180ms ease, opacity 150ms ease";
+  el.card.style.opacity = "1";
+  el.card.style.transform = "translate3d(0,0,0) rotate(0deg) scale(1)";
   setBadge("none");
 }
 
@@ -295,8 +328,11 @@ function setBadge(type: "none" | "like" | "pass"): void {
   el.badge.textContent = type === "like" ? "🐾🐾" : "🐾";
 }
 
-async function vote(isLike: boolean): Promise<void> {
-  if (!state.current) return;
+async function vote(isLike: boolean, options: { skipReset?: boolean } = {}): Promise<void> {
+  if (!state.current) {
+    state.isAdvancing = false;
+    return;
+  }
 
   if (isLike) {
     state.liked.unshift(state.current);
@@ -318,7 +354,7 @@ async function vote(isLike: boolean): Promise<void> {
   }
 
   shiftDeck();
-  renderDeck();
+  renderDeck({ skipReset: options.skipReset ?? false });
   if (state.queue.length < 10) {
     void fillQueue();
   }
@@ -344,8 +380,8 @@ function shiftDeck(): void {
   state.next = pickNextCandidate();
 }
 
-function renderDeck(): void {
-  resetCardPosition();
+function renderDeck(options: { skipReset?: boolean } = {}): void {
+  if (!options.skipReset) resetCardPosition();
 
   if (!state.current) {
     el.cardImage.removeAttribute("src");
