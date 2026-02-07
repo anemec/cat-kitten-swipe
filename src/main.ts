@@ -85,10 +85,13 @@ const el: Elements = {
 
 let drag = {
   active: false,
+  pointerId: null as number | null,
   startX: 0,
   startY: 0,
   x: 0,
   y: 0,
+  startTime: 0,
+  axisLocked: null as "x" | "y" | null,
 };
 
 boot().catch((err) => {
@@ -130,8 +133,15 @@ function attachEvents(): void {
   el.card.addEventListener("pointerdown", onPointerDown);
   el.card.addEventListener("pointermove", onPointerMove);
   el.card.addEventListener("pointerup", onPointerUp);
-  el.card.addEventListener("pointercancel", resetDrag);
-  el.card.addEventListener("lostpointercapture", resetDrag);
+  el.card.addEventListener("pointercancel", onPointerCancel);
+  el.card.addEventListener("lostpointercapture", onPointerCancel);
+
+  if (!("PointerEvent" in window)) {
+    el.card.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.card.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.card.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.card.addEventListener("touchcancel", onTouchCancel, { passive: true });
+  }
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "ArrowRight") void vote(true);
@@ -153,44 +163,104 @@ function onCardImageError(): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
-  drag.active = true;
-  drag.startX = event.clientX;
-  drag.startY = event.clientY;
-  drag.x = 0;
-  drag.y = 0;
+  if (!event.isPrimary) return;
+  startDrag(event.clientX, event.clientY, event.pointerId);
   el.card.setPointerCapture(event.pointerId);
 }
 
 function onPointerMove(event: PointerEvent): void {
+  if (!drag.active || drag.pointerId !== event.pointerId) return;
+  moveDrag(event.clientX, event.clientY, event.pointerType === "touch");
+}
+
+function onPointerUp(event: PointerEvent): void {
+  if (!drag.active || drag.pointerId !== event.pointerId) return;
+  endDrag();
+}
+
+function onPointerCancel(): void {
+  cancelDrag();
+}
+
+function onTouchStart(event: TouchEvent): void {
+  const t = event.touches[0];
+  if (!t) return;
+  startDrag(t.clientX, t.clientY, -1);
+}
+
+function onTouchMove(event: TouchEvent): void {
   if (!drag.active) return;
+  const t = event.touches[0];
+  if (!t) return;
+  moveDrag(t.clientX, t.clientY, true);
+  if (drag.axisLocked === "x") event.preventDefault();
+}
 
-  drag.x = event.clientX - drag.startX;
-  drag.y = event.clientY - drag.startY;
+function onTouchEnd(): void {
+  if (!drag.active) return;
+  endDrag();
+}
+
+function onTouchCancel(): void {
+  cancelDrag();
+}
+
+function startDrag(clientX: number, clientY: number, pointerId: number): void {
+  drag.active = true;
+  drag.pointerId = pointerId;
+  drag.startX = clientX;
+  drag.startY = clientY;
+  drag.x = 0;
+  drag.y = 0;
+  drag.startTime = performance.now();
+  drag.axisLocked = null;
+  el.card.style.transition = "none";
+}
+
+function moveDrag(clientX: number, clientY: number, isTouchLike: boolean): void {
+  drag.x = clientX - drag.startX;
+  drag.y = clientY - drag.startY;
+
+  if (!drag.axisLocked && (Math.abs(drag.x) > 8 || Math.abs(drag.y) > 8)) {
+    drag.axisLocked = Math.abs(drag.x) >= Math.abs(drag.y) ? "x" : "y";
+  }
+
+  if (drag.axisLocked === "y") {
+    if (isTouchLike) cancelDrag();
+    return;
+  }
+
   const rotate = drag.x * 0.04;
-  el.card.style.transform = `translate3d(${drag.x}px, ${drag.y * 0.15}px, 0) rotate(${rotate}deg)`;
+  el.card.style.transform = `translate3d(${drag.x}px, ${drag.y * 0.12}px, 0) rotate(${rotate}deg)`;
 
-  if (drag.x > 22) setBadge("like");
-  else if (drag.x < -22) setBadge("pass");
+  if (drag.x > 18) setBadge("like");
+  else if (drag.x < -18) setBadge("pass");
   else setBadge("none");
 }
 
-function onPointerUp(): void {
-  if (!drag.active) return;
+function endDrag(): void {
+  const elapsed = Math.max(1, performance.now() - drag.startTime);
+  const velocityX = drag.x / elapsed;
+  const threshold = Math.max(54, window.innerWidth * 0.15);
+  const isFlick = Math.abs(velocityX) > 0.55 && Math.abs(drag.x) > 22;
 
-  const threshold = Math.max(72, window.innerWidth * 0.18);
-  if (drag.x > threshold) {
+  if (drag.x > threshold || (isFlick && velocityX > 0)) {
     animateOutAndVote(true);
-  } else if (drag.x < -threshold) {
+  } else if (drag.x < -threshold || (isFlick && velocityX < 0)) {
     animateOutAndVote(false);
   } else {
     resetCardPosition();
   }
 
   drag.active = false;
+  drag.pointerId = null;
+  drag.axisLocked = null;
 }
 
-function resetDrag(): void {
+function cancelDrag(): void {
   drag.active = false;
+  drag.pointerId = null;
+  drag.axisLocked = null;
   resetCardPosition();
 }
 

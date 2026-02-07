@@ -59,7 +59,7 @@ body {
 
 .deck {
   position: relative;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
 }
 
