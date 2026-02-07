@@ -16,6 +16,7 @@ A mobile-first, Bumble-style swipe app for cat and kitten photos.
 - Free image sources:
   - TheCatAPI: `https://thecatapi.com/`
   - CATAAS: `https://cataas.com/`
+  - Shibe API (cats endpoint): `https://shibe.online/`
 - 1-user recommender:
   - metadata scoring (tags/source/orientation/media)
   - embedding similarity scoring with MobileNet + cosine similarity

@@ -6,7 +6,7 @@ export interface CatPhoto {
   height: number;
   tags: string[];
   mime: string;
-  source: "TheCatAPI" | "CATAAS";
+  source: "TheCatAPI" | "CATAAS" | "Shibe";
 }
 
 export interface PreferenceWeights {

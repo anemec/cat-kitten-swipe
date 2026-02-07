@@ -7,6 +7,7 @@ import { centroidOf } from "./lib/vector";
 
 const CAT_API_URL = "https://api.thecatapi.com/v1/images/search?limit=12";
 const CATAAS_API_URL = "https://cataas.com/api/cats";
+const SHIBE_API_URL = "https://shibe.online/api/cats?count=18&urls=true&httpsUrls=true";
 
 interface MLState {
   loading: boolean;
@@ -136,6 +137,19 @@ function attachEvents(): void {
     if (event.key === "ArrowRight") void vote(true);
     if (event.key === "ArrowLeft") void vote(false);
   });
+
+  el.cardImage.addEventListener("error", onCardImageError);
+}
+
+function onCardImageError(): void {
+  if (!state.current) return;
+
+  console.warn("Skipping broken image URL", state.current.url);
+  state.ml.embeddingCache.delete(state.current.unique);
+  state.ml.embeddingJobs.delete(state.current.unique);
+  el.hintText.textContent = "Skipped an unavailable image. Loading another cat...";
+  showNextCard();
+  if (state.queue.length < 10) void fillQueue();
 }
 
 function onPointerDown(event: PointerEvent): void {
@@ -290,8 +304,13 @@ async function fillQueue(): Promise<void> {
   state.fetching = true;
 
   try {
-    const [catApi, cataas] = await Promise.all([fetchTheCatApi(), fetchCataas()]);
-    const incoming = [...catApi, ...cataas].filter((cat) => cat.url && !state.seen.has(cat.unique)).slice(0, 36);
+    const fetched = await Promise.allSettled([fetchTheCatApi(), fetchCataas(), fetchShibeCats()]);
+    const allCats = fetched.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+    const incoming = allCats.filter((cat) => cat.url && !state.seen.has(cat.unique)).slice(0, 36);
+
+    if (!incoming.length && fetched.every((result) => result.status === "rejected")) {
+      throw new Error("All cat APIs failed");
+    }
 
     incoming.forEach((cat) => state.seen.add(cat.unique));
     state.queue.push(...incoming);
@@ -352,6 +371,30 @@ async function fetchCataas(): Promise<CatPhoto[]> {
     mime: item.mimetype || "image/jpeg",
     source: "CATAAS",
   }));
+}
+
+async function fetchShibeCats(): Promise<CatPhoto[]> {
+  const response = await fetch(SHIBE_API_URL);
+  if (!response.ok) throw new Error("Shibe API request failed");
+
+  const urls = (await response.json()) as string[];
+  if (!Array.isArray(urls)) return [];
+
+  return urls
+    .filter((url): url is string => typeof url === "string" && url.length > 0)
+    .map((url) => {
+      const id = url.split("/").pop()?.split("?")[0] ?? crypto.randomUUID();
+      return {
+        unique: `shibe:${id}`,
+        id,
+        url,
+        width: 800,
+        height: 800,
+        tags: [],
+        mime: extToMime(url),
+        source: "Shibe",
+      };
+    });
 }
 
 async function initML(): Promise<void> {
