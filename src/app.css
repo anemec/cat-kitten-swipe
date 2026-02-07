@@ -40,6 +40,49 @@ body {
   position: relative;
 }
 
+.initialLoader {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(800px 420px at 20% 10%, rgba(255, 244, 201, 0.8) 0%, transparent 60%),
+    radial-gradient(700px 360px at 80% 8%, rgba(196, 224, 205, 0.65) 0%, transparent 65%),
+    linear-gradient(180deg, #c0d8e6 0%, #9fc0ba 62%, #86a286 100%);
+  backdrop-filter: blur(1px);
+}
+
+.loaderInner {
+  width: min(460px, 92vw);
+  border-radius: 22px;
+  padding: 24px 20px;
+  text-align: center;
+  background: rgba(246, 241, 228, 0.86);
+  border: 1px solid rgba(70, 98, 82, 0.26);
+  box-shadow: 0 22px 45px rgba(34, 52, 43, 0.18);
+}
+
+.loaderInner h2 {
+  margin: 0;
+  font-family: "Playfair Display", serif;
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  color: #274236;
+}
+
+.loaderInner p {
+  margin: 8px 0 0;
+  color: #4a6358;
+  font-weight: 700;
+}
+
+.loaderPaws {
+  margin-top: 16px;
+  display: inline-flex;
+  gap: 10px;
+  font-size: 1.45rem;
+}
+
 .atmo {
   position: fixed;
   border-radius: 999px;

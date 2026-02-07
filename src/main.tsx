@@ -98,6 +98,7 @@ function App(): JSX.Element {
   const [liked, setLiked] = useState<CatPhoto[]>(() => loadLiked());
   const [fetchError, setFetchError] = useState("");
   const [isFetching, setIsFetching] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [swiping, setSwiping] = useState<{ unique: string; dir: SwipeDir } | null>(null);
 
   const seenRef = useRef<Set<string>>(new Set(liked.map((card) => card.unique)));
@@ -174,6 +175,12 @@ function App(): JSX.Element {
   }, [cards.length, fillQueue]);
 
   useEffect(() => {
+    if (!initialLoading || cards.length === 0) return;
+    const timer = window.setTimeout(() => setInitialLoading(false), 420);
+    return () => window.clearTimeout(timer);
+  }, [cards.length, initialLoading]);
+
+  useEffect(() => {
     preloadFromStack(cards);
   }, [cards, preloadFromStack]);
 
@@ -232,6 +239,26 @@ function App(): JSX.Element {
 
   return (
     <main className="scene">
+      {initialLoading ? (
+        <motion.div
+          className="initialLoader"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+        >
+          <div className="loaderInner">
+            <h2>Warming The Cat Bus</h2>
+            <p>Gathering kittens from the sky...</p>
+            <div className="loaderPaws" aria-hidden="true">
+              <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}>🐾</motion.span>
+              <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut", delay: 0.15 }}>🐾</motion.span>
+              <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}>🐾</motion.span>
+            </div>
+          </div>
+        </motion.div>
+      ) : null}
+
       <motion.div className="atmo a" animate={{ y: [-10, 10, -10], x: [-8, 10, -8] }} transition={{ repeat: Infinity, duration: 16, ease: "easeInOut" }} />
       <motion.div className="atmo b" animate={{ y: [8, -12, 8], x: [6, -8, 6] }} transition={{ repeat: Infinity, duration: 18, ease: "easeInOut" }} />
 
