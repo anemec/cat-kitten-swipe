@@ -40,9 +40,9 @@ interface Elements {
   badge: HTMLElement;
   sourceText: HTMLElement;
   hintText: HTMLElement;
-  queueStat: HTMLElement;
-  likedStat: HTMLElement;
-  mlStat: HTMLElement;
+  queueStat: HTMLElement | null;
+  likedStat: HTMLElement | null;
+  mlStat: HTMLElement | null;
   likedGrid: HTMLElement;
   likedTemplate: HTMLTemplateElement;
   likeBtn: HTMLButtonElement;
@@ -79,9 +79,9 @@ const el: Elements = {
   badge: mustGet("badge"),
   sourceText: mustGet("sourceText"),
   hintText: mustGet("hintText"),
-  queueStat: mustGet("queueStat"),
-  likedStat: mustGet("likedStat"),
-  mlStat: mustGet("mlStat"),
+  queueStat: document.getElementById("queueStat"),
+  likedStat: document.getElementById("likedStat"),
+  mlStat: document.getElementById("mlStat"),
   likedGrid: mustGet("likedGrid"),
   likedTemplate: mustGet("likedTemplate"),
   likeBtn: mustGet("likeBtn"),
@@ -292,7 +292,7 @@ function setBadge(type: "none" | "like" | "pass"): void {
   el.badge.classList.remove("show", "like", "pass");
   if (type === "none") return;
   el.badge.classList.add("show", type);
-  el.badge.textContent = type === "like" ? "2 Paws" : "1 Paw";
+  el.badge.textContent = type === "like" ? "🐾🐾" : "🐾";
 }
 
 async function vote(isLike: boolean): Promise<void> {
@@ -359,7 +359,7 @@ function renderDeck(): void {
   el.cardImage.src = cat.url;
   el.cardImage.alt = `Cat photo from ${cat.source}`;
   el.sourceText.textContent = `Source: ${cat.source}${cat.tags.length ? ` | tags: ${cat.tags.slice(0, 2).join(", ")}` : ""}`;
-  el.hintText.textContent = "Swipe right for 2 paws, left for 1 paw";
+  el.hintText.textContent = "Swipe right 🐾🐾, left 🐾";
 
   if (state.ml.ready) {
     void getEmbeddingForCat(cat);
@@ -671,10 +671,10 @@ function renderLiked(): void {
 }
 
 function updateStats(): void {
-  el.queueStat.textContent = `Queue: ${state.queue.length}`;
-  el.likedStat.textContent = `Liked: ${state.liked.length}`;
+  if (el.queueStat) el.queueStat.textContent = `Queue: ${state.queue.length}`;
+  if (el.likedStat) el.likedStat.textContent = `Liked: ${state.liked.length}`;
 }
 
 function setMLStatus(text: string): void {
-  el.mlStat.textContent = text;
+  if (el.mlStat) el.mlStat.textContent = text;
 }
