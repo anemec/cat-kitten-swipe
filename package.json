@@ -25,10 +25,17 @@
   "homepage": "https://github.com/anemec/cat-kitten-swipe#readme",
   "dependencies": {
     "@tensorflow-models/mobilenet": "^2.1.1",
-    "@tensorflow/tfjs": "^4.22.0"
+    "@tensorflow/tfjs": "^4.22.0",
+    "framer-motion": "^12.33.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-tinder-card": "^1.6.4"
   },
   "devDependencies": {
     "@types/node": "^25.2.1",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.1.3",
     "jsdom": "^28.0.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
