@@ -3,10 +3,12 @@ import type { CatPhoto, PreferenceWeights } from "./types";
 import { applyFeedback, emptyPrefs, hybridScore } from "./lib/recommender";
 import { centroidOf } from "./lib/vector";
 
-const CAT_API_URL = "https://api.thecatapi.com/v1/images/search?limit=12";
+const CAT_API_URL = "https://api.thecatapi.com/v1/images/search?limit=20";
 const CATAAS_API_URL = "https://cataas.com/api/cats";
-const SHIBE_API_URL = "https://shibe.online/api/cats?count=18&urls=true&httpsUrls=true";
+const SHIBE_API_URL = "https://shibe.online/api/cats?count=24&urls=true&httpsUrls=true";
 const ENABLE_EMBEDDINGS = false;
+const PRELOAD_TARGET = 30;
+const QUEUE_LOW_WATERMARK = 24;
 
 type TfModule = typeof import("@tensorflow/tfjs");
 type MobileNetModule = typeof import("@tensorflow-models/mobilenet");
@@ -179,7 +181,7 @@ function onCardImageError(): void {
   el.hintText.textContent = "Skipped an unavailable image. Loading another cat...";
   shiftDeck();
   renderDeck();
-  if (state.queue.length < 10) void fillQueue();
+  if (state.queue.length < QUEUE_LOW_WATERMARK) void fillQueue();
 }
 
 function onPointerDown(event: PointerEvent): void {
@@ -294,32 +296,28 @@ function triggerVote(isLike: boolean): void {
 async function animateOutAndVote(isLike: boolean): Promise<void> {
   const direction = isLike ? 1 : -1;
   const x = direction * (window.innerWidth + 80);
-  el.card.style.transition = "transform 210ms cubic-bezier(0.2, 0.8, 0.35, 1), opacity 180ms ease";
+  el.card.style.transition = "transform 230ms cubic-bezier(0.2, 0.82, 0.35, 1), opacity 210ms ease";
   el.card.style.opacity = "0.92";
   el.card.style.transform = `translate3d(${x}px, 0, 0) rotate(${direction * 24}deg)`;
-
-  window.setTimeout(async () => {
-    await vote(isLike, { skipReset: true });
-    animateCardIn(direction);
-  }, 190);
+  await waitForTransition(el.card, 260);
+  await vote(isLike, { skipReset: true });
+  await animateCardIn(direction);
 }
 
-function animateCardIn(direction: number): void {
+async function animateCardIn(direction: number): Promise<void> {
   el.card.style.transition = "none";
-  el.card.style.opacity = "0.2";
-  el.card.style.transform = `translate3d(${direction * 34}px, 8px, 0) scale(0.985)`;
+  el.card.style.opacity = "0.08";
+  el.card.style.transform = `translate3d(${direction * 38}px, 10px, 0) scale(0.982)`;
   setBadge("none");
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      el.card.style.transition = "transform 250ms cubic-bezier(0.22, 1, 0.36, 1), opacity 210ms ease";
-      el.card.style.opacity = "1";
-      el.card.style.transform = "translate3d(0,0,0) rotate(0deg) scale(1)";
-      window.setTimeout(() => {
-        state.isAdvancing = false;
-      }, 230);
-    });
-  });
+  await nextFrame();
+  await nextFrame();
+
+  el.card.style.transition = "transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 230ms ease";
+  el.card.style.opacity = "1";
+  el.card.style.transform = "translate3d(0,0,0) rotate(0deg) scale(1)";
+  await waitForTransition(el.card, 320);
+  state.isAdvancing = false;
 }
 
 function resetCardPosition(): void {
@@ -363,7 +361,7 @@ async function vote(isLike: boolean, options: { skipReset?: boolean } = {}): Pro
 
   shiftDeck();
   renderDeck({ skipReset: options.skipReset ?? false });
-  if (state.queue.length < 10) {
+  if (state.queue.length < QUEUE_LOW_WATERMARK) {
     void fillQueue();
   }
 }
@@ -379,7 +377,7 @@ function ensureDeckPrimed(): void {
     state.next = pickNextCandidate();
   }
 
-  preloadUpcomingImages(10);
+  preloadUpcomingImages(PRELOAD_TARGET);
   updateStats();
 }
 
@@ -409,7 +407,7 @@ function renderDeck(options: { skipReset?: boolean } = {}): void {
     void getEmbeddingForCat(cat);
   }
 
-  preloadUpcomingImages(10);
+  preloadUpcomingImages(PRELOAD_TARGET);
   updateStats();
 }
 
@@ -450,7 +448,7 @@ async function fillQueue(): Promise<void> {
   try {
     const fetched = await Promise.allSettled([fetchTheCatApi(), fetchCataas(), fetchShibeCats()]);
     const allCats = fetched.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-    const incoming = allCats.filter((cat) => cat.url && !state.seen.has(cat.unique)).slice(0, 36);
+    const incoming = allCats.filter((cat) => cat.url && !state.seen.has(cat.unique)).slice(0, 60);
 
     if (!incoming.length && fetched.every((result) => result.status === "rejected")) {
       throw new Error("All cat APIs failed");
@@ -460,8 +458,8 @@ async function fillQueue(): Promise<void> {
     state.queue.push(...incoming);
     updateStats();
 
-    if (state.ml.ready) warmEmbeddings(incoming, 10);
-    preloadUpcomingImages(10);
+    if (state.ml.ready) warmEmbeddings(incoming, 16);
+    preloadUpcomingImages(PRELOAD_TARGET);
     ensureDeckPrimed();
   } catch (err) {
     console.error("Fetch failed", err);
@@ -496,7 +494,7 @@ async function fetchTheCatApi(): Promise<CatPhoto[]> {
 
 async function fetchCataas(): Promise<CatPhoto[]> {
   const skip = Math.floor(Math.random() * 5000);
-  const url = `${CATAAS_API_URL}?limit=18&skip=${skip}`;
+  const url = `${CATAAS_API_URL}?limit=24&skip=${skip}`;
   const response = await fetch(url);
   if (!response.ok) throw new Error("CATAAS request failed");
 
@@ -612,6 +610,27 @@ function preloadUpcomingImages(limit: number): void {
 
   candidates.forEach((cat) => {
     void preloadImage(cat.url);
+  });
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function waitForTransition(node: HTMLElement, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (): void => {
+      if (settled) return;
+      settled = true;
+      node.removeEventListener("transitionend", onEnd);
+      resolve();
+    };
+    const onEnd = (event: TransitionEvent): void => {
+      if (event.target === node) done();
+    };
+    node.addEventListener("transitionend", onEnd);
+    window.setTimeout(done, timeoutMs);
   });
 }
 

@@ -109,6 +109,7 @@ body::before {
   box-shadow: var(--card-shadow);
   transform: translate3d(0, 0, 0) rotate(0deg);
   transition: transform 180ms ease;
+  will-change: transform, opacity;
 }
 
 .card-main {
