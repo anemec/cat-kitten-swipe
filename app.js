@@ -1,3 +1,6 @@
+import * as tf from "https://esm.sh/@tensorflow/tfjs@4.22.0";
+import * as mobilenet from "https://esm.sh/@tensorflow-models/mobilenet@2.1.1";
+
 const CAT_API_URL = "https://api.thecatapi.com/v1/images/search?limit=12";
 const CATAAS_API_URL = "https://cataas.com/api/cats";
 
@@ -13,6 +16,17 @@ const state = {
     orientation: {},
     media: {},
   },
+  ml: {
+    loading: false,
+    ready: false,
+    error: null,
+    model: null,
+    embeddingCache: new Map(),
+    embeddingJobs: new Map(),
+    likedVectors: [],
+    likedVectorIds: new Set(),
+    centroid: null,
+  },
 };
 
 const el = {
@@ -23,6 +37,7 @@ const el = {
   hintText: document.getElementById("hintText"),
   queueStat: document.getElementById("queueStat"),
   likedStat: document.getElementById("likedStat"),
+  mlStat: document.getElementById("mlStat"),
   likedGrid: document.getElementById("likedGrid"),
   likedTemplate: document.getElementById("likedTemplate"),
   likeBtn: document.getElementById("likeBtn"),
@@ -47,6 +62,11 @@ async function boot() {
   renderLiked();
   attachEvents();
   hydratePrefsFromLikes();
+
+  initML().catch((err) => {
+    console.error("ML init failed", err);
+  });
+
   await fillQueue();
   showNextCard();
 }
@@ -58,6 +78,9 @@ function attachEvents() {
   el.clearLikesBtn.addEventListener("click", () => {
     state.liked = [];
     state.prefs = { tags: {}, source: {}, orientation: {}, media: {} };
+    state.ml.likedVectors = [];
+    state.ml.likedVectorIds = new Set();
+    state.ml.centroid = null;
     saveLikes(state.liked);
     renderLiked();
     updateStats();
@@ -143,6 +166,11 @@ async function vote(isLike) {
     saveLikes(state.liked);
     applyFeedback(state.current, 1);
     renderLiked();
+    if (state.ml.ready) {
+      getEmbeddingForCat(state.current)
+        .then((vector) => addLikedVector(state.current, vector))
+        .catch((err) => console.error("Embedding update failed", err));
+    }
   } else {
     applyFeedback(state.current, -0.35);
   }
@@ -166,10 +194,16 @@ function showNextCard() {
   }
 
   const c = state.current;
+  el.cardImage.crossOrigin = "anonymous";
   el.cardImage.src = c.url;
   el.cardImage.alt = `Cat photo from ${c.source}`;
   el.sourceText.textContent = `Source: ${c.source}${c.tags.length ? ` | tags: ${c.tags.slice(0, 2).join(", ")}` : ""}`;
   el.hintText.textContent = "Swipe right to like, left to pass";
+
+  if (state.ml.ready) {
+    getEmbeddingForCat(c).catch(() => {});
+  }
+
   updateStats();
 }
 
@@ -195,10 +229,20 @@ function predictLikeScore(cat) {
   const features = extractFeatures(cat);
   let score = Math.random() * 0.2;
 
-  for (const t of features.tags) score += (state.prefs.tags[t] || 0) * 0.55;
-  score += (state.prefs.source[features.source] || 0) * 0.35;
-  score += (state.prefs.orientation[features.orientation] || 0) * 0.3;
-  score += (state.prefs.media[features.media] || 0) * 0.2;
+  for (const t of features.tags) score += (state.prefs.tags[t] || 0) * 0.45;
+  score += (state.prefs.source[features.source] || 0) * 0.25;
+  score += (state.prefs.orientation[features.orientation] || 0) * 0.22;
+  score += (state.prefs.media[features.media] || 0) * 0.15;
+
+  if (state.ml.ready && state.ml.centroid) {
+    const vector = state.ml.embeddingCache.get(cat.unique);
+    if (vector) {
+      score += cosine(vector, state.ml.centroid) * 2.2;
+    } else {
+      score += 0.06;
+      getEmbeddingForCat(cat).catch(() => {});
+    }
+  }
 
   return score;
 }
@@ -236,6 +280,10 @@ async function fillQueue() {
     incoming.forEach((c) => state.seen.add(c.unique));
     state.queue.push(...incoming);
     updateStats();
+
+    if (state.ml.ready) {
+      warmEmbeddings(incoming, 10);
+    }
 
     if (!state.current) showNextCard();
   } catch (e) {
@@ -280,6 +328,130 @@ async function fetchCataas() {
     mime: item.mimetype || "image/jpeg",
     source: "CATAAS",
   }));
+}
+
+async function initML() {
+  if (state.ml.loading || state.ml.ready) return;
+  state.ml.loading = true;
+  setMLStatus("AI: loading MobileNet...");
+
+  try {
+    try {
+      await tf.setBackend("webgl");
+    } catch {
+      await tf.setBackend("cpu");
+    }
+
+    await tf.ready();
+    state.ml.model = await mobilenet.load({ version: 2, alpha: 1.0 });
+    state.ml.ready = true;
+    setMLStatus(`AI: ready (${tf.getBackend()})`);
+
+    warmEmbeddings(state.queue, 10);
+    rebuildLikedVectorsFromStorage();
+  } catch (err) {
+    state.ml.error = String(err);
+    setMLStatus("AI: unavailable");
+  } finally {
+    state.ml.loading = false;
+  }
+}
+
+async function rebuildLikedVectorsFromStorage() {
+  const recent = state.liked.slice(0, 25);
+  for (const cat of recent) {
+    try {
+      const vector = await getEmbeddingForCat(cat);
+      addLikedVector(cat, vector);
+    } catch {
+      // Continue if some old images are no longer reachable.
+    }
+  }
+}
+
+function warmEmbeddings(cats, limit) {
+  const batch = cats.slice(0, limit);
+  batch.forEach((cat) => {
+    getEmbeddingForCat(cat).catch(() => {});
+  });
+}
+
+async function getEmbeddingForCat(cat) {
+  if (!state.ml.ready || !state.ml.model) return null;
+  if (state.ml.embeddingCache.has(cat.unique)) return state.ml.embeddingCache.get(cat.unique);
+  if (state.ml.embeddingJobs.has(cat.unique)) return state.ml.embeddingJobs.get(cat.unique);
+
+  const job = (async () => {
+    const img = await loadImage(cat.url);
+    const vector = tf.tidy(() => {
+      const emb = state.ml.model.infer(img, true);
+      const tensorOut = Array.isArray(emb) ? emb[0] : emb;
+      const tensor = tensorOut.squeeze();
+      const normalized = tensor.div(tf.norm(tensor));
+      return Array.from(normalized.dataSync());
+    });
+
+    state.ml.embeddingCache.set(cat.unique, vector);
+    return vector;
+  })();
+
+  state.ml.embeddingJobs.set(cat.unique, job);
+
+  try {
+    return await job;
+  } finally {
+    state.ml.embeddingJobs.delete(cat.unique);
+  }
+}
+
+function addLikedVector(cat, vector) {
+  if (!vector) return;
+  if (state.ml.likedVectorIds.has(cat.unique)) return;
+
+  state.ml.likedVectorIds.add(cat.unique);
+  state.ml.likedVectors.unshift(vector);
+  state.ml.likedVectors = state.ml.likedVectors.slice(0, 60);
+  recomputeCentroid();
+}
+
+function recomputeCentroid() {
+  if (!state.ml.likedVectors.length) {
+    state.ml.centroid = null;
+    return;
+  }
+
+  const size = state.ml.likedVectors[0].length;
+  const sum = new Array(size).fill(0);
+
+  for (const vec of state.ml.likedVectors) {
+    for (let i = 0; i < size; i += 1) sum[i] += vec[i];
+  }
+
+  for (let i = 0; i < size; i += 1) sum[i] /= state.ml.likedVectors.length;
+  state.ml.centroid = normalize(sum);
+}
+
+function normalize(v) {
+  const mag = Math.sqrt(v.reduce((acc, n) => acc + n * n, 0)) || 1;
+  return v.map((n) => n / mag);
+}
+
+function cosine(a, b) {
+  let dot = 0;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i += 1) dot += a[i] * b[i];
+  return dot;
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Image load failed: ${url}`));
+    img.src = url;
+  });
 }
 
 function extToMime(url) {
@@ -328,4 +500,8 @@ function renderLiked() {
 function updateStats() {
   el.queueStat.textContent = `Queue: ${state.queue.length}`;
   el.likedStat.textContent = `Liked: ${state.liked.length}`;
+}
+
+function setMLStatus(text) {
+  if (el.mlStat) el.mlStat.textContent = text;
 }

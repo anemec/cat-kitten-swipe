@@ -11,19 +11,25 @@ A mobile-first, Bumble-style swipe app for cat and kitten photos.
   - TheCatAPI: `https://thecatapi.com/`
   - CATAAS (Cat as a Service): `https://cataas.com/`
 
-## Basic recommendation algorithm (included)
+## Recommendation model (TensorFlow.js + MobileNet)
 
-The app includes a lightweight 1-user recommender:
+The app now uses a client-side vision recommender for 1 user:
 
-- It tracks features from liked photos:
-  - source (`TheCatAPI` vs `CATAAS`)
-  - orientation (`portrait`, `landscape`, `square`)
-  - media type (`gif` vs still image)
-  - tags (from CATAAS metadata)
-- Each new card gets a score from those learned preferences.
-- Highest score is shown next, so liked patterns are prioritized over time.
+- Loads MobileNet in-browser via TensorFlow.js (no server required)
+- Creates normalized image embeddings for swiped photos
+- Builds a centroid vector of liked photos
+- Ranks incoming cards by cosine similarity to that centroid
+- Combines this with lightweight metadata preferences (source, orientation, media type, tags)
 
-This is intentionally simple, private, and runs fully in-browser.
+Everything runs locally in the browser. No personal data leaves your device except image/API fetches.
+
+## Tech notes
+
+- No build pipeline is required for GitHub Pages.
+- Dependencies are loaded as browser ESM from CDN:
+  - `@tensorflow/tfjs`
+  - `@tensorflow-models/mobilenet`
+- Because this is static hosting, GitHub Actions are optional and not required for deployment.
 
 ## Run locally
 
@@ -52,4 +58,3 @@ Your site URL will be:
 
 - Free APIs may have rate limits.
 - For personal use, no backend is needed.
-- If you want stronger recommendations later, you can add image embeddings (e.g. with TensorFlow.js + MobileNet) and nearest-neighbor scoring.

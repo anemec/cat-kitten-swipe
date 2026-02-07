@@ -46,6 +46,7 @@ body {
 
 .stats {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   color: var(--muted);
   font-size: 0.9rem;
