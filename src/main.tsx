@@ -8,9 +8,10 @@ const CAT_API_URL = "https://api.thecatapi.com/v1/images/search?limit=24";
 const CATAAS_API_URL = "https://cataas.com/api/cats";
 const SHIBE_API_URL = "https://shibe.online/api/cats?count=28&urls=true&httpsUrls=true";
 
-const PRELOAD_TARGET = 40;
-const QUEUE_LOW_WATERMARK = 30;
+const PRELOAD_TARGET = 20;
+const QUEUE_LOW_WATERMARK = 20;
 const INCOMING_CAP = 90;
+const SWIPE_FALLBACK_MS = 460;
 
 function loadLiked(): CatPhoto[] {
   try {
@@ -105,6 +106,7 @@ function App(): JSX.Element {
   const preloadedRef = useRef<Set<string>>(new Set());
   const preloadJobsRef = useRef<Map<string, Promise<void>>>(new Map());
   const fetchingRef = useRef(false);
+  const swipeTimeoutRef = useRef<number | null>(null);
 
   const swipeThreshold = useMemo(() => {
     if (typeof window === "undefined") return 100;
@@ -200,6 +202,24 @@ function App(): JSX.Element {
     },
     [fillQueue],
   );
+
+  useEffect(() => {
+    if (!swiping) return;
+
+    if (swipeTimeoutRef.current) window.clearTimeout(swipeTimeoutRef.current);
+    swipeTimeoutRef.current = window.setTimeout(() => {
+      removeCard(swiping.unique);
+      setSwiping(null);
+      swipeTimeoutRef.current = null;
+    }, SWIPE_FALLBACK_MS);
+
+    return () => {
+      if (swipeTimeoutRef.current) {
+        window.clearTimeout(swipeTimeoutRef.current);
+        swipeTimeoutRef.current = null;
+      }
+    };
+  }, [removeCard, swiping]);
 
   const likeCard = useCallback((card: CatPhoto) => {
     setLiked((prev) => {
@@ -304,6 +324,10 @@ function App(): JSX.Element {
                 transition={{ type: "spring", stiffness: 460, damping: 34, mass: 0.72 }}
                 onAnimationComplete={() => {
                   if (isActiveSwipe) {
+                    if (swipeTimeoutRef.current) {
+                      window.clearTimeout(swipeTimeoutRef.current);
+                      swipeTimeoutRef.current = null;
+                    }
                     removeCard(card.unique);
                     setSwiping(null);
                   }
@@ -314,6 +338,10 @@ function App(): JSX.Element {
                   alt="Cat"
                   loading={isTop ? "eager" : "lazy"}
                   onError={() => {
+                    if (swipeTimeoutRef.current) {
+                      window.clearTimeout(swipeTimeoutRef.current);
+                      swipeTimeoutRef.current = null;
+                    }
                     removeCard(card.unique);
                     if (swiping?.unique === card.unique) setSwiping(null);
                   }}
