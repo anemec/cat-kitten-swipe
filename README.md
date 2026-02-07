@@ -1,60 +1,46 @@
-# CatSwipe (GitHub Pages)
+# CatSwipe (TypeScript + MobileNet)
 
 A mobile-first, Bumble-style swipe app for cat and kitten photos.
+
+## Stack
+
+- TypeScript + Vite
+- TensorFlow.js + MobileNet embeddings (client-side)
+- Vitest unit tests for recommendation logic
+- GitHub Actions workflow for typecheck, tests, build, and Pages deploy
 
 ## Features
 
 - Swipe right to like, left to pass (touch + mouse + keyboard arrows)
-- Like gallery that stores your liked photos in `localStorage`
-- Works as a static site (no backend) and can be published on GitHub Pages
-- Pulls pictures from free APIs:
+- Like gallery persisted in `localStorage`
+- Free image sources:
   - TheCatAPI: `https://thecatapi.com/`
-  - CATAAS (Cat as a Service): `https://cataas.com/`
+  - CATAAS: `https://cataas.com/`
+- 1-user recommender:
+  - metadata scoring (tags/source/orientation/media)
+  - embedding similarity scoring with MobileNet + cosine similarity
 
-## Recommendation model (TensorFlow.js + MobileNet)
-
-The app now uses a client-side vision recommender for 1 user:
-
-- Loads MobileNet in-browser via TensorFlow.js (no server required)
-- Creates normalized image embeddings for swiped photos
-- Builds a centroid vector of liked photos
-- Ranks incoming cards by cosine similarity to that centroid
-- Combines this with lightweight metadata preferences (source, orientation, media type, tags)
-
-Everything runs locally in the browser. No personal data leaves your device except image/API fetches.
-
-## Tech notes
-
-- No build pipeline is required for GitHub Pages.
-- Dependencies are loaded as browser ESM from CDN:
-  - `@tensorflow/tfjs`
-  - `@tensorflow-models/mobilenet`
-- Because this is static hosting, GitHub Actions are optional and not required for deployment.
-
-## Run locally
-
-Open `index.html` directly, or use a static server:
+## Development
 
 ```bash
-python3 -m http.server 8080
+npm install
+npm run dev
 ```
 
-Then open <http://localhost:8080>.
+## Quality checks
 
-## Deploy to GitHub Pages
+```bash
+npm run typecheck
+npm test
+npm run build
+```
 
-After pushing to `main`, enable Pages:
+## Deployment
 
-1. Repo `Settings`
-2. `Pages`
-3. Source: `Deploy from a branch`
-4. Branch: `main` and folder `/ (root)`
-
-Your site URL will be:
-
-`https://<your-username>.github.io/<repo-name>/`
+- Build output goes to `docs/`.
+- `.github/workflows/pages.yml` runs tests + build and deploys to GitHub Pages on `main`.
 
 ## Notes
 
-- Free APIs may have rate limits.
-- For personal use, no backend is needed.
+- This is personal-use, fully static hosting (no backend).
+- Free APIs may impose rate limits.

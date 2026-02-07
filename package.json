@@ -1,0 +1,38 @@
+{
+  "name": "cat-kitten-swipe",
+  "version": "1.0.0",
+  "description": "A mobile-first, Bumble-style swipe app for cat and kitten photos.",
+  "main": "app.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anemec/cat-kitten-swipe.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/anemec/cat-kitten-swipe/issues"
+  },
+  "homepage": "https://github.com/anemec/cat-kitten-swipe#readme",
+  "dependencies": {
+    "@tensorflow-models/mobilenet": "^2.1.1",
+    "@tensorflow/tfjs": "^4.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "jsdom": "^28.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  },
+  "private": true
+}
