@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>CatSwipe</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <h1>CatSwipe</h1>
+      <div class="stats">
+        <span id="queueStat">Queue: 0</span>
+        <span id="likedStat">Liked: 0</span>
+      </div>
+    </header>
+
+    <section class="deck-section">
+      <div id="deck" class="deck" aria-live="polite">
+        <article id="card" class="card" tabindex="0">
+          <img id="cardImage" alt="Random cat or kitten" />
+          <div class="overlay">
+            <span id="badge" class="badge">Ready</span>
+            <div class="meta">
+              <p id="sourceText">Source: -</p>
+              <p id="hintText">Swipe right to like, left to pass</p>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="actions">
+        <button id="passBtn" class="action pass" aria-label="Pass">
+          Nope
+        </button>
+        <button id="likeBtn" class="action like" aria-label="Like">
+          Like
+        </button>
+      </div>
+    </section>
+
+    <section class="liked-section">
+      <div class="liked-header">
+        <h2>Liked Cats & Kittens</h2>
+        <button id="clearLikesBtn" class="linkish">Clear</button>
+      </div>
+      <div id="likedGrid" class="liked-grid"></div>
+    </section>
+  </main>
+
+  <template id="likedTemplate">
+    <figure class="liked-item">
+      <img alt="Liked cat" loading="lazy" />
+      <figcaption></figcaption>
+    </figure>
+  </template>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
