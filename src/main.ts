@@ -37,8 +37,6 @@ interface AppState {
 interface Elements {
   card: HTMLElement;
   cardImage: HTMLImageElement;
-  nextCard: HTMLElement;
-  nextCardImage: HTMLImageElement;
   badge: HTMLElement;
   sourceText: HTMLElement;
   hintText: HTMLElement;
@@ -78,8 +76,6 @@ const state: AppState = {
 const el: Elements = {
   card: mustGet("card"),
   cardImage: mustGet("cardImage"),
-  nextCard: mustGet("nextCard"),
-  nextCardImage: mustGet("nextCardImage"),
   badge: mustGet("badge"),
   sourceText: mustGet("sourceText"),
   hintText: mustGet("hintText"),
@@ -337,7 +333,6 @@ function ensureDeckPrimed(): void {
 
   if (!state.next) {
     state.next = pickNextCandidate();
-    renderNextCard();
   }
 
   preloadUpcomingImages(10);
@@ -354,7 +349,6 @@ function renderDeck(): void {
 
   if (!state.current) {
     el.cardImage.removeAttribute("src");
-    renderNextCard();
     el.sourceText.textContent = "Source: loading...";
     el.hintText.textContent = "Pulling more cats and kittens...";
     updateStats();
@@ -366,7 +360,6 @@ function renderDeck(): void {
   el.cardImage.alt = `Cat photo from ${cat.source}`;
   el.sourceText.textContent = `Source: ${cat.source}${cat.tags.length ? ` | tags: ${cat.tags.slice(0, 2).join(", ")}` : ""}`;
   el.hintText.textContent = "Swipe right for 2 paws, left for 1 paw";
-  renderNextCard();
 
   if (state.ml.ready) {
     void getEmbeddingForCat(cat);
@@ -374,18 +367,6 @@ function renderDeck(): void {
 
   preloadUpcomingImages(10);
   updateStats();
-}
-
-function renderNextCard(): void {
-  const next = state.next;
-  if (!next) {
-    el.nextCard.classList.add("empty");
-    el.nextCardImage.removeAttribute("src");
-    return;
-  }
-
-  el.nextCard.classList.remove("empty");
-  el.nextCardImage.src = next.url;
 }
 
 function pickNextCandidate(): CatPhoto | null {

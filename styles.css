@@ -1,12 +1,18 @@
+@import url("https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Spectral:wght@500;700&display=swap");
+
 :root {
-  --bg0: #0f172a;
-  --bg1: #111827;
-  --bg2: #1f2937;
-  --text: #e5e7eb;
-  --muted: #94a3b8;
-  --like: #22c55e;
-  --pass: #ef4444;
-  --card-shadow: 0 20px 35px rgba(0, 0, 0, 0.35);
+  --sky: #9ec6d7;
+  --mist: #edf2e4;
+  --field: #7ea07a;
+  --forest: #496652;
+  --sun: #e8bf73;
+  --petal: #d58e8a;
+  --ink: #2f3d33;
+  --ink-soft: #5b6b5c;
+  --card: #f7f3e9;
+  --panel: rgba(247, 243, 233, 0.75);
+  --line: rgba(73, 102, 82, 0.24);
+  --card-shadow: 0 24px 42px rgba(32, 41, 34, 0.24);
 }
 
 * {
@@ -17,18 +23,35 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  color: var(--text);
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--ink);
+  font-family: "Quicksand", "Trebuchet MS", sans-serif;
   background:
-    radial-gradient(1000px 480px at 10% -20%, #374151 0%, transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, #1e3a8a 0%, transparent 70%),
-    linear-gradient(155deg, var(--bg0), var(--bg1) 45%, var(--bg2));
+    radial-gradient(1200px 600px at -5% -15%, rgba(255, 245, 209, 0.82) 0%, transparent 55%),
+    radial-gradient(900px 560px at 115% 15%, rgba(129, 161, 126, 0.52) 0%, transparent 60%),
+    linear-gradient(180deg, var(--sky) 0%, #c7ddcc 44%, #aec696 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -12deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.08) 2px,
+    transparent 2px,
+    transparent 12px
+  );
+  opacity: 0.28;
 }
 
 .app {
-  width: min(720px, 100%);
+  position: relative;
+  z-index: 1;
+  width: min(760px, 100%);
   margin: 0 auto;
-  padding: 16px 14px calc(20px + env(safe-area-inset-bottom));
+  padding: 18px 14px calc(20px + env(safe-area-inset-bottom));
 }
 
 .topbar {
@@ -40,16 +63,26 @@ body {
 
 .topbar h1 {
   margin: 4px 0 10px;
-  letter-spacing: 0.4px;
-  font-size: clamp(1.4rem, 4vw, 1.8rem);
+  color: #244133;
+  font-family: "Spectral", Georgia, serif;
+  letter-spacing: 0.2px;
+  font-size: clamp(1.7rem, 5vw, 2.15rem);
 }
 
 .stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 0.9rem;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.stats span {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--ink-soft);
+  backdrop-filter: blur(2px);
 }
 
 .deck-section {
@@ -61,18 +94,25 @@ body {
   position: relative;
   touch-action: pan-y;
   user-select: none;
+  aspect-ratio: 3 / 4;
 }
 
 .card {
-  position: relative;
-  border-radius: 22px;
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
   overflow: hidden;
   width: 100%;
-  aspect-ratio: 3 / 4;
-  background: #0b1220;
+  height: 100%;
+  background: var(--card);
+  border: 1px solid rgba(107, 130, 95, 0.35);
   box-shadow: var(--card-shadow);
   transform: translate3d(0, 0, 0) rotate(0deg);
   transition: transform 180ms ease;
+}
+
+.card-main {
+  z-index: 2;
 }
 
 .card img {
@@ -89,7 +129,7 @@ body {
   flex-direction: column;
   justify-content: space-between;
   padding: 12px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent 45%);
+  background: linear-gradient(to top, rgba(34, 49, 38, 0.56), rgba(42, 68, 50, 0.08) 48%, transparent 72%);
 }
 
 .badge {
@@ -100,9 +140,10 @@ body {
   letter-spacing: 1px;
   font-size: 0.78rem;
   padding: 7px 11px;
-  border: 2px solid #fff;
+  border: 2px solid #f8f3e6;
   border-radius: 999px;
   opacity: 0;
+  color: #f8f3e6;
   transition: opacity 90ms linear;
 }
 
@@ -111,30 +152,30 @@ body {
 }
 
 .badge.like {
-  color: var(--like);
-  border-color: var(--like);
-  background: rgba(34, 197, 94, 0.18);
+  color: #ffefc8;
+  border-color: #ffd88c;
+  background: rgba(232, 191, 115, 0.32);
 }
 
 .badge.pass {
-  color: var(--pass);
-  border-color: var(--pass);
-  background: rgba(239, 68, 68, 0.2);
+  color: #ffe5e0;
+  border-color: #f3aca6;
+  background: rgba(213, 142, 138, 0.36);
 }
 
 .meta {
-  color: #f3f4f6;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  color: #f8f3e6;
+  text-shadow: 0 1px 2px rgba(25, 37, 29, 0.6);
 }
 
 .meta p {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.93rem;
 }
 
 .meta p + p {
-  margin-top: 3px;
-  color: #d1d5db;
+  margin-top: 4px;
+  color: #e9e3d0;
   font-size: 0.84rem;
 }
 
@@ -145,21 +186,22 @@ body {
 }
 
 .action {
-  border: none;
-  border-radius: 14px;
+  border: 1px solid rgba(51, 73, 57, 0.2);
+  border-radius: 15px;
   padding: 12px;
-  color: #fff;
+  color: #fff7eb;
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 8px 14px rgba(39, 56, 45, 0.16);
 }
 
 .action.pass {
-  background: linear-gradient(135deg, #7f1d1d, #ef4444);
+  background: linear-gradient(135deg, #b7726f, var(--petal));
 }
 
 .action.like {
-  background: linear-gradient(135deg, #14532d, #22c55e);
+  background: linear-gradient(135deg, #c6964f, var(--sun));
 }
 
 .action:active {
@@ -168,26 +210,32 @@ body {
 
 .liked-section {
   margin-top: 18px;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
 }
 
 .liked-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 9px;
+  margin-bottom: 10px;
 }
 
 .liked-header h2 {
   margin: 0;
-  font-size: 1.04rem;
+  color: #2f4a38;
+  font-family: "Spectral", Georgia, serif;
+  font-size: 1.16rem;
 }
 
 .linkish {
-  background: transparent;
-  color: #bfdbfe;
-  border: 1px solid #3b82f6;
-  border-radius: 9px;
-  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #335447;
+  border: 1px solid rgba(58, 91, 74, 0.42);
+  border-radius: 10px;
+  padding: 6px 10px;
   cursor: pointer;
 }
 
@@ -199,10 +247,10 @@ body {
 
 .liked-item {
   margin: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  background: #111827;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: #e8ecdf;
+  border: 1px solid rgba(122, 148, 108, 0.35);
 }
 
 .liked-item img {
@@ -214,7 +262,7 @@ body {
 
 .liked-item figcaption {
   font-size: 0.68rem;
-  color: #cbd5e1;
+  color: #405847;
   padding: 5px 6px;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -223,7 +271,7 @@ body {
 
 @media (min-width: 640px) {
   .app {
-    padding-top: 22px;
+    padding-top: 24px;
   }
 
   .liked-grid {
