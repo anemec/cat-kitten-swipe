@@ -19,24 +19,27 @@
 
     <section class="deck-section">
       <div id="deck" class="deck" aria-live="polite">
-        <article id="card" class="card" tabindex="0">
+        <article id="nextCard" class="card card-next empty" aria-hidden="true">
+          <img id="nextCardImage" alt="Next cat preview" />
+        </article>
+        <article id="card" class="card card-main" tabindex="0">
           <img id="cardImage" alt="Random cat or kitten" />
           <div class="overlay">
             <span id="badge" class="badge">Ready</span>
             <div class="meta">
               <p id="sourceText">Source: -</p>
-              <p id="hintText">Swipe right to like, left to pass</p>
+              <p id="hintText">Swipe right for 2 paws, left for 1 paw</p>
             </div>
           </div>
         </article>
       </div>
 
       <div class="actions">
-        <button id="passBtn" class="action pass" aria-label="Pass">
-          Nope
+        <button id="passBtn" class="action pass" aria-label="One Paw">
+          🐾 1 Paw
         </button>
-        <button id="likeBtn" class="action like" aria-label="Like">
-          Like
+        <button id="likeBtn" class="action like" aria-label="Two Paws">
+          🐾🐾 2 Paws
         </button>
       </div>
     </section>

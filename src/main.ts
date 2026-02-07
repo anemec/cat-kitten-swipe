@@ -24,16 +24,21 @@ interface MLState {
 interface AppState {
   queue: CatPhoto[];
   current: CatPhoto | null;
+  next: CatPhoto | null;
   liked: CatPhoto[];
   seen: Set<string>;
   fetching: boolean;
   prefs: PreferenceWeights;
+  preloadedUrls: Set<string>;
+  preloadJobs: Map<string, Promise<void>>;
   ml: MLState;
 }
 
 interface Elements {
   card: HTMLElement;
   cardImage: HTMLImageElement;
+  nextCard: HTMLElement;
+  nextCardImage: HTMLImageElement;
   badge: HTMLElement;
   sourceText: HTMLElement;
   hintText: HTMLElement;
@@ -50,10 +55,13 @@ interface Elements {
 const state: AppState = {
   queue: [],
   current: null,
+  next: null,
   liked: loadLikes(),
   seen: new Set(),
   fetching: false,
   prefs: emptyPrefs(),
+  preloadedUrls: new Set(),
+  preloadJobs: new Map(),
   ml: {
     loading: false,
     ready: false,
@@ -70,6 +78,8 @@ const state: AppState = {
 const el: Elements = {
   card: mustGet("card"),
   cardImage: mustGet("cardImage"),
+  nextCard: mustGet("nextCard"),
+  nextCardImage: mustGet("nextCardImage"),
   badge: mustGet("badge"),
   sourceText: mustGet("sourceText"),
   hintText: mustGet("hintText"),
@@ -106,7 +116,7 @@ async function boot(): Promise<void> {
 
   void initML();
   await fillQueue();
-  showNextCard();
+  ensureDeckPrimed();
 }
 
 function mustGet<T extends HTMLElement>(id: string): T {
@@ -157,8 +167,11 @@ function onCardImageError(): void {
   console.warn("Skipping broken image URL", state.current.url);
   state.ml.embeddingCache.delete(state.current.unique);
   state.ml.embeddingJobs.delete(state.current.unique);
+  state.preloadedUrls.delete(state.current.url);
+  state.preloadJobs.delete(state.current.url);
   el.hintText.textContent = "Skipped an unavailable image. Loading another cat...";
-  showNextCard();
+  shiftDeck();
+  renderDeck();
   if (state.queue.length < 10) void fillQueue();
 }
 
@@ -283,7 +296,7 @@ function setBadge(type: "none" | "like" | "pass"): void {
   el.badge.classList.remove("show", "like", "pass");
   if (type === "none") return;
   el.badge.classList.add("show", type);
-  el.badge.textContent = type === "like" ? "Like" : "Nope";
+  el.badge.textContent = type === "like" ? "2 Paws" : "1 Paw";
 }
 
 async function vote(isLike: boolean): Promise<void> {
@@ -308,18 +321,40 @@ async function vote(isLike: boolean): Promise<void> {
     applyFeedback(state.prefs, state.current, -0.35);
   }
 
-  showNextCard();
+  shiftDeck();
+  renderDeck();
   if (state.queue.length < 10) {
     void fillQueue();
   }
 }
 
-function showNextCard(): void {
-  state.current = pickNextCandidate();
+function ensureDeckPrimed(): void {
+  if (!state.current) {
+    shiftDeck();
+    renderDeck();
+    return;
+  }
+
+  if (!state.next) {
+    state.next = pickNextCandidate();
+    renderNextCard();
+  }
+
+  preloadUpcomingImages(10);
+  updateStats();
+}
+
+function shiftDeck(): void {
+  state.current = state.next ?? pickNextCandidate();
+  state.next = pickNextCandidate();
+}
+
+function renderDeck(): void {
   resetCardPosition();
 
   if (!state.current) {
     el.cardImage.removeAttribute("src");
+    renderNextCard();
     el.sourceText.textContent = "Source: loading...";
     el.hintText.textContent = "Pulling more cats and kittens...";
     updateStats();
@@ -330,13 +365,27 @@ function showNextCard(): void {
   el.cardImage.src = cat.url;
   el.cardImage.alt = `Cat photo from ${cat.source}`;
   el.sourceText.textContent = `Source: ${cat.source}${cat.tags.length ? ` | tags: ${cat.tags.slice(0, 2).join(", ")}` : ""}`;
-  el.hintText.textContent = "Swipe right to like, left to pass";
+  el.hintText.textContent = "Swipe right for 2 paws, left for 1 paw";
+  renderNextCard();
 
   if (state.ml.ready) {
     void getEmbeddingForCat(cat);
   }
 
+  preloadUpcomingImages(10);
   updateStats();
+}
+
+function renderNextCard(): void {
+  const next = state.next;
+  if (!next) {
+    el.nextCard.classList.add("empty");
+    el.nextCardImage.removeAttribute("src");
+    return;
+  }
+
+  el.nextCard.classList.remove("empty");
+  el.nextCardImage.src = next.url;
 }
 
 function pickNextCandidate(): CatPhoto | null {
@@ -387,7 +436,8 @@ async function fillQueue(): Promise<void> {
     updateStats();
 
     if (state.ml.ready) warmEmbeddings(incoming, 10);
-    if (!state.current) showNextCard();
+    preloadUpcomingImages(10);
+    ensureDeckPrimed();
   } catch (err) {
     console.error("Fetch failed", err);
     el.hintText.textContent = "API fetch failed. Check connection and try again.";
@@ -510,6 +560,38 @@ function warmEmbeddings(cats: CatPhoto[], limit: number): void {
   cats.slice(0, limit).forEach((cat) => {
     void getEmbeddingForCat(cat);
   });
+}
+
+function preloadUpcomingImages(limit: number): void {
+  const candidates: CatPhoto[] = [];
+  if (state.current) candidates.push(state.current);
+  if (state.next) candidates.push(state.next);
+  candidates.push(...state.queue.slice(0, limit));
+
+  candidates.forEach((cat) => {
+    void preloadImage(cat.url);
+  });
+}
+
+function preloadImage(url: string): Promise<void> {
+  if (state.preloadedUrls.has(url)) return Promise.resolve();
+  if (state.preloadJobs.has(url)) return state.preloadJobs.get(url) ?? Promise.resolve();
+
+  const job = new Promise<void>((resolve) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      state.preloadedUrls.add(url);
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = url;
+  }).finally(() => {
+    state.preloadJobs.delete(url);
+  });
+
+  state.preloadJobs.set(url, job);
+  return job;
 }
 
 async function getEmbeddingForCat(cat: CatPhoto): Promise<number[] | null> {
