@@ -243,7 +243,6 @@ function showNextCard(): void {
   }
 
   const cat = state.current;
-  el.cardImage.crossOrigin = "anonymous";
   el.cardImage.src = cat.url;
   el.cardImage.alt = `Cat photo from ${cat.source}`;
   el.sourceText.textContent = `Source: ${cat.source}${cat.tags.length ? ` | tags: ${cat.tags.slice(0, 2).join(", ")}` : ""}`;
